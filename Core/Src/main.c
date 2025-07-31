@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -63,7 +64,7 @@ static void MX_GPIO_Init(void);
   */
 int main(void)
 {
-
+  int count = 0;
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -101,6 +102,7 @@ int main(void)
     HAL_GPIO_TogglePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin);
     HAL_GPIO_TogglePin(LED_RED_GPIO_Port, LED_RED_Pin);
     HAL_Delay(1000);
+    printf("LEDs toggled!: %d \n", count++);
   }
   /* USER CODE END 3 */
 }
