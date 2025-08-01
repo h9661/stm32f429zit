@@ -27,7 +27,20 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef enum {
+  LED_MODE_ALL_OFF = 0,
+  LED_MODE_SINGLE_PRESS,    // Green LED only
+  LED_MODE_DOUBLE_PRESS,    // Green and Blue LEDs
+  LED_MODE_LONG_PRESS,      // All LEDs blinking
+  LED_MODE_COUNT
+} LED_Mode_t;
 
+typedef enum {
+  BUTTON_IDLE = 0,
+  BUTTON_PRESSED,
+  BUTTON_RELEASED,
+  BUTTON_WAIT_DOUBLE
+} Button_State_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -43,14 +56,22 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+static LED_Mode_t currentLedMode = LED_MODE_ALL_OFF;
+static Button_State_t buttonState = BUTTON_IDLE;
+static uint32_t buttonPressTime = 0;
+static uint32_t buttonReleaseTime = 0;
+static uint32_t lastDebounceTime = 0;
+static uint8_t clickCount = 0;
+static uint8_t buttonPressed = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void ProcessButtonPress(void);
+static void UpdateLEDs(void);
+static void SetLEDMode(LED_Mode_t mode);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -93,16 +114,20 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  printf("Button LED Control System Started\n");
+  printf("Press patterns:\n");
+  printf("- Single press: Green LED\n");
+  printf("- Double press: Green + Blue LEDs\n");
+  printf("- Long press: All LEDs blinking\n\n");
+  
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin);
-    HAL_GPIO_TogglePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin);
-    HAL_GPIO_TogglePin(LED_RED_GPIO_Port, LED_RED_Pin);
-    HAL_Delay(1000);
-    printf("LEDs toggled!: %d \n", count++);
+    ProcessButtonPress();
+    UpdateLEDs();
+    HAL_Delay(10); // 10ms loop delay for responsive button handling
   }
   /* USER CODE END 3 */
 }
@@ -150,6 +175,156 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
+/**
+  * @brief  Process button press events and detect press patterns
+  * @retval None
+  */
+static void ProcessButtonPress(void)
+{
+  uint32_t currentTime = HAL_GetTick();
+  
+  // Handle button state machine
+  switch (buttonState) {
+    case BUTTON_IDLE:
+      // Waiting for button press (handled in interrupt)
+      break;
+      
+    case BUTTON_PRESSED:
+      // Check for long press
+      if (buttonPressed && (currentTime - buttonPressTime) >= BUTTON_LONG_PRESS_TIME) {
+        SetLEDMode(LED_MODE_LONG_PRESS);
+        buttonState = BUTTON_IDLE;
+        clickCount = 0;
+        printf("Long press detected! Mode: All LEDs blinking\n");
+      }
+      break;
+      
+    case BUTTON_RELEASED:
+      // Button was released, wait for possible double click
+      buttonState = BUTTON_WAIT_DOUBLE;
+      break;
+      
+    case BUTTON_WAIT_DOUBLE:
+      // Check if double click window expired
+      if (currentTime - buttonReleaseTime > BUTTON_DOUBLE_CLICK_TIME) {
+        if (clickCount == 1) {
+          SetLEDMode(LED_MODE_SINGLE_PRESS);
+          printf("Single press detected! Mode: Green LED only\n");
+        } else if (clickCount == 2) {
+          SetLEDMode(LED_MODE_DOUBLE_PRESS);
+          printf("Double press detected! Mode: Green + Blue LEDs\n");
+        }
+        clickCount = 0;
+        buttonState = BUTTON_IDLE;
+      }
+      break;
+  }
+}
+
+/**
+  * @brief  Update LEDs based on current mode
+  * @retval None
+  */
+static void UpdateLEDs(void)
+{
+  static uint32_t lastBlinkTime = 0;
+  static uint8_t blinkState = 0;
+  uint32_t currentTime = HAL_GetTick();
+  
+  switch (currentLedMode) {
+    case LED_MODE_ALL_OFF:
+      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
+      break;
+      
+    case LED_MODE_SINGLE_PRESS:
+      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET);
+      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
+      break;
+      
+    case LED_MODE_DOUBLE_PRESS:
+      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET);
+      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_SET);
+      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
+      break;
+      
+    case LED_MODE_LONG_PRESS:
+      // Blink all LEDs
+      if (currentTime - lastBlinkTime >= 250) {
+        blinkState = !blinkState;
+        HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        lastBlinkTime = currentTime;
+      }
+      break;
+      
+    default:
+      break;
+  }
+}
+
+/**
+  * @brief  Set LED mode and handle mode transitions
+  * @param  mode: New LED mode to set
+  * @retval None
+  */
+static void SetLEDMode(LED_Mode_t mode)
+{
+  currentLedMode = mode;
+  
+  // Reset LEDs when changing modes
+  if (mode != LED_MODE_LONG_PRESS) {
+    HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
+  }
+}
+
+/**
+  * @brief  EXTI line detection callback
+  * @param  GPIO_Pin: Specifies the pins connected to EXTI line
+  * @retval None
+  */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  uint32_t currentTime = HAL_GetTick();
+  
+  if (GPIO_Pin == USER_BUTTON_Pin) {
+    // Debounce check
+    if (currentTime - lastDebounceTime < BUTTON_DEBOUNCE_TIME) {
+      return;
+    }
+    lastDebounceTime = currentTime;
+    
+    // Check current button state
+    if (HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin) == GPIO_PIN_RESET) {
+      // Button pressed
+      buttonPressed = 1;
+      buttonPressTime = currentTime;
+      buttonState = BUTTON_PRESSED;
+      
+      // Check if this is a subsequent click for double-click detection
+      if (currentTime - buttonReleaseTime < BUTTON_DOUBLE_CLICK_TIME) {
+        clickCount++;
+      } else {
+        clickCount = 1;
+      }
+    } else {
+      // Button released
+      buttonPressed = 0;
+      buttonReleaseTime = currentTime;
+      
+      // Only register as released if it wasn't a long press
+      if (buttonState == BUTTON_PRESSED && (currentTime - buttonPressTime) < BUTTON_LONG_PRESS_TIME) {
+        buttonState = BUTTON_RELEASED;
+      }
+    }
+  }
+}
+
 /* USER CODE END 4 */
 
 /**
@@ -163,6 +338,7 @@ static void MX_GPIO_Init(void)
   
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   
   /* Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LED_GREEN_Pin|LED_BLUE_Pin|LED_RED_Pin, GPIO_PIN_RESET);
@@ -173,6 +349,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  
+  /* Configure User Button pin */
+  GPIO_InitStruct.Pin = USER_BUTTON_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(USER_BUTTON_GPIO_Port, &GPIO_InitStruct);
+  
+  /* EXTI interrupt init */
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 }
 
 /**

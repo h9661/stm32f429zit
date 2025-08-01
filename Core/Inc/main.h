@@ -65,6 +65,16 @@ void Error_Handler(void);
 #define LED_BLUE_GPIO_Port GPIOB
 #define LED_RED_Pin GPIO_PIN_14
 #define LED_RED_GPIO_Port GPIOB
+
+/* User Button - PC13 on Nucleo-144 boards */
+#define USER_BUTTON_Pin GPIO_PIN_13
+#define USER_BUTTON_GPIO_Port GPIOC
+#define USER_BUTTON_EXTI_IRQn EXTI15_10_IRQn
+
+/* Button timing definitions (in ms) */
+#define BUTTON_DEBOUNCE_TIME 50
+#define BUTTON_DOUBLE_CLICK_TIME 400
+#define BUTTON_LONG_PRESS_TIME 1000
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
