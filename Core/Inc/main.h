@@ -66,7 +66,7 @@ void Error_Handler(void);
 #define LED_RED_Pin GPIO_PIN_14
 #define LED_RED_GPIO_Port GPIOB
 
-/* User Button - PC13 on Nucleo-144 boards */
+/* User Button - PC13 on Nucleo-144 boards (Active HIGH when pressed) */
 #define USER_BUTTON_Pin GPIO_PIN_13
 #define USER_BUTTON_GPIO_Port GPIOC
 #define USER_BUTTON_EXTI_IRQn EXTI15_10_IRQn

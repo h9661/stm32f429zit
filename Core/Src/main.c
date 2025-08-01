@@ -300,8 +300,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     lastDebounceTime = currentTime;
     
     // Check current button state
-    if (HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin) == GPIO_PIN_RESET) {
-      // Button pressed
+    if (HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin) == GPIO_PIN_SET) {
+      // Button pressed (Nucleo button is active HIGH)
       buttonPressed = 1;
       buttonPressTime = currentTime;
       buttonState = BUTTON_PRESSED;
@@ -320,6 +320,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
       // Only register as released if it wasn't a long press
       if (buttonState == BUTTON_PRESSED && (currentTime - buttonPressTime) < BUTTON_LONG_PRESS_TIME) {
         buttonState = BUTTON_RELEASED;
+      } else if (buttonState == BUTTON_PRESSED && (currentTime - buttonPressTime) >= BUTTON_LONG_PRESS_TIME) {
+        // Long press already handled, reset to idle
+        buttonState = BUTTON_IDLE;
       }
     }
   }
