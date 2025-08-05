@@ -41,12 +41,15 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-
+extern volatile uint32_t debounceCounter;
+extern volatile uint32_t blinkCounter;
+extern volatile uint8_t buttonCounter;
+extern volatile uint8_t blinkState;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-
+void ApplyLEDPattern(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -187,7 +190,29 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-
+  
+  // Decrement debounce counter if active
+  if (debounceCounter > 0) {
+    debounceCounter--;
+  }
+  
+  // Handle LED blinking for patterns 8 and 9
+  if (buttonCounter == 8 || buttonCounter == 9) {
+    uint32_t blinkInterval = (buttonCounter == 8) ? 500 : 100;
+    
+    blinkCounter++;
+    if (blinkCounter >= blinkInterval) {
+      blinkCounter = 0;
+      blinkState = !blinkState;
+      
+      // Update LEDs directly in interrupt for blinking patterns
+      // This is safe because HAL_GPIO_WritePin is atomic
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);  // Green
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);  // Blue
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET); // Red
+    }
+  }
+  
   /* USER CODE END SysTick_IRQn 1 */
 }
 
