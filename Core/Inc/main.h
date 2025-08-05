@@ -73,8 +73,6 @@ void Error_Handler(void);
 
 /* Button timing definitions (in ms) */
 #define BUTTON_DEBOUNCE_TIME 50
-#define BUTTON_DOUBLE_CLICK_TIME 400
-#define BUTTON_LONG_PRESS_TIME 1000
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
