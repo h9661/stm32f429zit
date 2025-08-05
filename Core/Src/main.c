@@ -54,17 +54,17 @@ typedef enum {
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-static volatile uint8_t buttonCounter = 0;  // Counter 0-9
-static volatile uint32_t debounceCounter = 0;  // Debounce counter in ms
-static volatile uint32_t blinkCounter = 0;    // Blink counter in ms
-static volatile uint8_t blinkState = 0;
+volatile uint8_t buttonCounter = 0;  // Counter 0-9
+volatile uint32_t debounceCounter = 0;  // Debounce counter in ms
+volatile uint32_t blinkCounter = 0;    // Blink counter in ms
+volatile uint8_t blinkState = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-static void ApplyLEDPattern(void);
+void ApplyLEDPattern(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -167,7 +167,7 @@ void SystemClock_Config(void)
   * @brief  Apply LED pattern based on current counter value
   * @retval None
   */
-static void ApplyLEDPattern(void)
+void ApplyLEDPattern(void)
 {
   // Apply LED pattern based on counter
   switch (buttonCounter) {
