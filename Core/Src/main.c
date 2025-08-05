@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -55,20 +54,17 @@ typedef enum {
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-static uint8_t buttonCounter = 0;  // Counter 0-9
-static uint32_t lastDebounceTime = 0;
-static uint8_t lastButtonState = GPIO_PIN_RESET;
-static uint32_t lastBlinkTime = 0;
-static uint8_t blinkState = 0;
+static volatile uint8_t buttonCounter = 0;  // Counter 0-9
+static volatile uint32_t debounceCounter = 0;  // Debounce counter in ms
+static volatile uint32_t blinkCounter = 0;    // Blink counter in ms
+static volatile uint8_t blinkState = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-static void ProcessButtonPress(void);
-static void UpdateLEDPattern(void);
-static void SetLEDPattern(uint8_t count);
+static void ApplyLEDPattern(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -110,28 +106,16 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  printf("Button Counter LED Control System Started\n");
-  printf("Press button to increment counter (0-9)\n");
-  printf("LED Patterns:\n");
-  printf("  0: All OFF\n");
-  printf("  1: Green ON\n");
-  printf("  2: Blue ON\n");
-  printf("  3: Green + Blue ON\n");
-  printf("  4: Red ON\n");
-  printf("  5: Red + Green ON\n");
-  printf("  6: Red + Blue ON\n");
-  printf("  7: All ON\n");
-  printf("  8: All blinking slow\n");
-  printf("  9: All blinking fast\n\n");
+  // Initialize LEDs to show counter 0 (all OFF)
+  ApplyLEDPattern();
   
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    ProcessButtonPress();
-    UpdateLEDPattern();
-    HAL_Delay(10); // 10ms loop delay for responsive button handling
+    // Everything is handled in interrupts
+    __WFI();  // Wait For Interrupt
   }
   /* USER CODE END 3 */
 }
@@ -180,60 +164,11 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 /**
-  * @brief  Process button press events and increment counter
+  * @brief  Apply LED pattern based on current counter value
   * @retval None
   */
-static void ProcessButtonPress(void)
+static void ApplyLEDPattern(void)
 {
-  uint32_t currentTime = HAL_GetTick();
-  uint8_t currentButtonState = HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin);
-  
-  // Debounce check
-  if (currentTime - lastDebounceTime < BUTTON_DEBOUNCE_TIME) {
-    return;
-  }
-  
-  // Detect button press (rising edge - button pressed)
-  if (currentButtonState == GPIO_PIN_SET && lastButtonState == GPIO_PIN_RESET) {
-    lastDebounceTime = currentTime;
-    
-    // Increment counter
-    buttonCounter++;
-    if (buttonCounter > 9) {
-      buttonCounter = 0;  // Wrap around to 0 after 9
-    }
-    
-    printf("Button pressed! Counter: %d\n", buttonCounter);
-    
-    // Update LED pattern immediately
-    SetLEDPattern(buttonCounter);
-  }
-  
-  lastButtonState = currentButtonState;
-}
-
-/**
-  * @brief  Update LED pattern based on current counter value
-  * @retval None
-  */
-static void UpdateLEDPattern(void)
-{
-  uint32_t currentTime = HAL_GetTick();
-  uint32_t blinkInterval = 0;
-  
-  // Handle blinking patterns
-  if (buttonCounter == 8) {
-    blinkInterval = 500;  // Slow blink
-  } else if (buttonCounter == 9) {
-    blinkInterval = 100;  // Fast blink
-  }
-  
-  // Update blink state if needed
-  if (blinkInterval > 0 && (currentTime - lastBlinkTime >= blinkInterval)) {
-    blinkState = !blinkState;
-    lastBlinkTime = currentTime;
-  }
-  
   // Apply LED pattern based on counter
   switch (buttonCounter) {
     case 0:  // All OFF
@@ -296,21 +231,7 @@ static void UpdateLEDPattern(void)
   }
 }
 
-/**
-  * @brief  Set LED pattern based on counter value
-  * @param  count: Counter value (0-9)
-  * @retval None
-  */
-static void SetLEDPattern(uint8_t count)
-{
-  // Reset blink state when changing patterns
-  if (count < 8) {
-    blinkState = 0;
-    lastBlinkTime = HAL_GetTick();
-  }
-  
-  // The actual pattern is applied in UpdateLEDPattern()
-}
+
 
 /**
   * @brief  EXTI line detection callback
@@ -319,9 +240,25 @@ static void SetLEDPattern(uint8_t count)
   */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  // The button processing is now handled in the main loop
-  // This interrupt just triggers the main loop to check the button
-  // This approach provides better debouncing control
+  if (GPIO_Pin == USER_BUTTON_Pin) {
+    // Check if button is pressed (active HIGH) and debounce timer expired
+    if (HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin) == GPIO_PIN_SET && 
+        debounceCounter == 0) {
+      // Increment counter directly in interrupt
+      buttonCounter = (buttonCounter + 1) % 10;
+      
+      // Reset blink state for non-blinking patterns
+      if (buttonCounter < 8) {
+        blinkCounter = blinkState = 0;
+      }
+      
+      // Update LEDs immediately in interrupt
+      ApplyLEDPattern();
+      
+      // Start debounce timer
+      debounceCounter = BUTTON_DEBOUNCE_TIME;
+    }
+  }
 }
 
 /* USER CODE END 4 */
