@@ -21,24 +21,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "led_patterns.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef enum {
-  LED_PATTERN_0 = 0,  // All OFF
-  LED_PATTERN_1,      // Green ON
-  LED_PATTERN_2,      // Blue ON
-  LED_PATTERN_3,      // Green + Blue ON
-  LED_PATTERN_4,      // Red ON
-  LED_PATTERN_5,      // Red + Green ON
-  LED_PATTERN_6,      // Red + Blue ON
-  LED_PATTERN_7,      // All ON
-  LED_PATTERN_8,      // All blinking slow (500ms)
-  LED_PATTERN_9,      // All blinking fast (100ms)
-  LED_PATTERN_COUNT
-} LED_Pattern_t;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -54,17 +42,22 @@ typedef enum {
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-volatile uint8_t buttonCounter = 0;  // Counter 0-9
+volatile uint8_t currentPattern = 0;    // Current pattern index
 volatile uint32_t debounceCounter = 0;  // Debounce counter in ms
-volatile uint32_t blinkCounter = 0;    // Blink counter in ms
-volatile uint8_t blinkState = 0;
+volatile uint32_t systemTick = 0;       // System tick counter
+volatile uint32_t buttonPressTime = 0;  // Button press duration
+volatile uint8_t buttonPressCount = 0;  // For double-click detection
+volatile uint32_t lastButtonRelease = 0; // Last button release time
+volatile uint8_t isButtonPressed = 0;   // Current button state
+volatile uint8_t patternSpeed = 50;     // Current speed (10-200ms)
+volatile uint8_t patternIntensity = 100; // Current intensity (0-100%)
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-void ApplyLEDPattern(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -101,20 +94,22 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
-
+  // Initialize LED pattern system
+  LED_Pattern_Init();
+  LED_Pattern_SetPattern(PATTERN_WAVE);
+  LED_Pattern_SetSpeed(50);  // 50ms update rate
+  LED_Pattern_SetIntensity(100);  // Full brightness
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  // Initialize LEDs to show counter 0 (all OFF)
-  ApplyLEDPattern();
-  
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    // Everything is handled in interrupts
+    // Main loop - patterns are updated in SysTick interrupt
+    // Use WFI to save power between interrupts
     __WFI();  // Wait For Interrupt
   }
   /* USER CODE END 3 */
@@ -163,75 +158,6 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-/**
-  * @brief  Apply LED pattern based on current counter value
-  * @retval None
-  */
-void ApplyLEDPattern(void)
-{
-  // Apply LED pattern based on counter
-  switch (buttonCounter) {
-    case 0:  // All OFF
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
-      break;
-      
-    case 1:  // Green ON
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
-      break;
-      
-    case 2:  // Blue ON
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
-      break;
-      
-    case 3:  // Green + Blue ON
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
-      break;
-      
-    case 4:  // Red ON
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_SET);
-      break;
-      
-    case 5:  // Red + Green ON
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_SET);
-      break;
-      
-    case 6:  // Red + Blue ON
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_SET);
-      break;
-      
-    case 7:  // All ON
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, GPIO_PIN_SET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_SET);
-      break;
-      
-    case 8:  // All blinking slow
-    case 9:  // All blinking fast
-      HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_BLUE_GPIO_Port, LED_BLUE_Pin, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);
-      HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);
-      break;
-      
-    default:
-      break;
-  }
-}
-
-
 
 /**
   * @brief  EXTI line detection callback
@@ -241,19 +167,41 @@ void ApplyLEDPattern(void)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   if (GPIO_Pin == USER_BUTTON_Pin) {
-    // Check if button is pressed (active HIGH) and debounce timer expired
-    if (HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin) == GPIO_PIN_SET && 
-        debounceCounter == 0) {
-      // Increment counter directly in interrupt
-      buttonCounter = (buttonCounter + 1) % 10;
+    if (debounceCounter == 0) {
+      uint8_t buttonState = HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin);
       
-      // Reset blink state for non-blinking patterns
-      if (buttonCounter < 8) {
-        blinkCounter = blinkState = 0;
+      if (buttonState == GPIO_PIN_SET && !isButtonPressed) {
+        // Button pressed
+        isButtonPressed = 1;
+        buttonPressTime = systemTick;
+        
+        // Check for double click
+        if ((systemTick - lastButtonRelease) < BUTTON_DOUBLE_CLICK_TIME) {
+          // Double click detected - toggle intensity
+          if (patternIntensity == 100) {
+            patternIntensity = 50;
+          } else if (patternIntensity == 50) {
+            patternIntensity = 25;
+          } else {
+            patternIntensity = 100;
+          }
+          LED_Pattern_SetIntensity(patternIntensity);
+        }
+        
+      } else if (buttonState == GPIO_PIN_RESET && isButtonPressed) {
+        // Button released
+        uint32_t pressDuration = systemTick - buttonPressTime;
+        
+        if (pressDuration < BUTTON_LONG_PRESS_TIME) {
+          // Short press - change pattern
+          LED_Pattern_NextPattern();
+        } else {
+          // Long press was handled in SysTick
+        }
+        
+        isButtonPressed = 0;
+        lastButtonRelease = systemTick;
       }
-      
-      // Update LEDs immediately in interrupt
-      ApplyLEDPattern();
       
       // Start debounce timer
       debounceCounter = BUTTON_DEBOUNCE_TIME;
