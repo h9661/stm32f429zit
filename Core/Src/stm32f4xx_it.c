@@ -22,6 +22,7 @@
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "led_patterns.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -42,14 +43,15 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
 extern volatile uint32_t debounceCounter;
-extern volatile uint32_t blinkCounter;
-extern volatile uint8_t buttonCounter;
-extern volatile uint8_t blinkState;
+extern volatile uint32_t systemTick;
+extern volatile uint32_t buttonPressTime;
+extern volatile uint8_t isButtonPressed;
+extern volatile uint8_t patternSpeed;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-void ApplyLEDPattern(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -191,27 +193,36 @@ void SysTick_Handler(void)
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
   
+  // Increment system tick
+  systemTick++;
+  
   // Decrement debounce counter if active
   if (debounceCounter > 0) {
     debounceCounter--;
   }
   
-  // Handle LED blinking for patterns 8 and 9
-  if (buttonCounter == 8 || buttonCounter == 9) {
-    uint32_t blinkInterval = (buttonCounter == 8) ? 500 : 100;
-    
-    blinkCounter++;
-    if (blinkCounter >= blinkInterval) {
-      blinkCounter = 0;
-      blinkState = !blinkState;
-      
-      // Update LEDs directly in interrupt for blinking patterns
-      // This is safe because HAL_GPIO_WritePin is atomic
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);  // Green
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET);  // Blue
-      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, blinkState ? GPIO_PIN_SET : GPIO_PIN_RESET); // Red
+  // Handle long press for speed control
+  if (isButtonPressed) {
+    uint32_t pressDuration = systemTick - buttonPressTime;
+    if (pressDuration > BUTTON_LONG_PRESS_TIME) {
+      // Long press - adjust speed
+      // Cycle through speeds every 500ms during long press
+      if ((pressDuration % 500) == 0) {
+        if (patternSpeed >= 100) {
+          patternSpeed = 20;  // Fast
+        } else if (patternSpeed >= 50) {
+          patternSpeed = 100; // Slow
+        } else {
+          patternSpeed = 50;  // Medium
+        }
+        LED_Pattern_SetSpeed(patternSpeed);
+      }
     }
   }
+  
+  // Update LED patterns
+  // Call this frequently for smooth animations and PWM
+  LED_Pattern_Update(systemTick);
   
   /* USER CODE END SysTick_IRQn 1 */
 }
