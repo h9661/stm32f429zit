@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "led_patterns.h"
+#include "motor_control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,6 +57,7 @@ volatile uint8_t patternIntensity = 100; // Current intensity (0-100%)
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -93,12 +95,17 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   // Initialize LED pattern system
   LED_Pattern_Init();
   LED_Pattern_SetPattern(PATTERN_WAVE);
   LED_Pattern_SetSpeed(50);  // 50ms update rate
   LED_Pattern_SetIntensity(100);  // Full brightness
+  
+  // Initialize motor control system
+  Motor_Control_Init();
+  Motor_Control_SetMode(MOTOR_MODE_WAVE);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -109,8 +116,11 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     // Main loop - patterns are updated in SysTick interrupt
-    // Use WFI to save power between interrupts
-    __WFI();  // Wait For Interrupt
+    // Update motor control system
+    Motor_Control_Update();
+    
+    // Small delay for motor update rate (10ms)
+    HAL_Delay(10);
   }
   /* USER CODE END 3 */
 }
@@ -158,7 +168,6 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-
 /**
   * @brief  EXTI line detection callback
   * @param  GPIO_Pin: Specifies the pins connected to EXTI line
@@ -193,8 +202,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
         uint32_t pressDuration = systemTick - buttonPressTime;
         
         if (pressDuration < BUTTON_LONG_PRESS_TIME) {
-          // Short press - change pattern
+          // Short press - change pattern and motor mode
           LED_Pattern_NextPattern();
+          
+          // Cycle through motor modes
+          static uint8_t motorModeIndex = 0;
+          MotorMode_t motorModes[] = {MOTOR_MODE_WAVE, MOTOR_MODE_SWEEP, 
+                                      MOTOR_MODE_STEP, MOTOR_MODE_RANDOM, 
+                                      MOTOR_MODE_DEMO};
+          motorModeIndex = (motorModeIndex + 1) % 5;
+          Motor_Control_SetMode(motorModes[motorModeIndex]);
         } else {
           // Long press was handled in SysTick
         }
@@ -210,6 +227,51 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 }
 
 /* USER CODE END 4 */
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+  /* TIM3 clock enable */
+  RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+  
+  /* TIM3 GPIO Configuration
+     PA6 ------> TIM3_CH1 (Servo PWM)
+  */
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Alternate = GPIO_AF2_TIM3;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* TIM3 configuration using direct register access */
+  TIM3->PSC = 16 - 1;  // Prescaler: 16MHz / 16 = 1MHz (1us per tick)
+  TIM3->ARR = 20000 - 1;  // Auto-reload: 20ms period for servo (50Hz)
+  
+  /* Configure Channel 1 for PWM Mode 1 */
+  TIM3->CCMR1 &= ~(TIM_CCMR1_OC1M | TIM_CCMR1_CC1S);
+  TIM3->CCMR1 |= (6 << TIM_CCMR1_OC1M_Pos);  // PWM mode 1
+  TIM3->CCMR1 |= TIM_CCMR1_OC1PE;  // Enable preload
+  
+  /* Enable Channel 1 output */
+  TIM3->CCER |= TIM_CCER_CC1E;
+  
+  /* Set initial pulse width (1.5ms = 1500us for center position) */
+  TIM3->CCR1 = 1500;
+  
+  /* Enable auto-reload preload */
+  TIM3->CR1 |= TIM_CR1_ARPE;
+  
+  /* Enable counter */
+  TIM3->CR1 |= TIM_CR1_CEN;
+}
 
 /**
   * @brief GPIO Initialization Function
